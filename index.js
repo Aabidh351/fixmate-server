@@ -45,6 +45,59 @@ app.get("/api/services/featured", async (req, res) => {
   }
 });
 
+
+app.get("/api/services", async (req, res) => {
+  try {
+    const { search, category, serviceMode, sort } = req.query;
+
+    const filter = {
+      approvalStatus: "approved",
+      isAvailable: true,
+    };
+
+    if (category && category !== "All") {
+      filter.category = category;
+    }
+
+    if (serviceMode && serviceMode !== "All") {
+      filter.serviceMode = serviceMode;
+    }
+
+    if (search) {
+      const searchRegex = new RegExp(
+        String(search).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+        "i"
+      );
+
+      filter.$or = [
+        { title: searchRegex },
+        { category: searchRegex },
+        { description: searchRegex },
+      ];
+    }
+
+    let sortOption = { createdAt: -1 };
+
+    if (sort === "price-low") {
+      sortOption = { basePrice: 1 };
+    } else if (sort === "price-high") {
+      sortOption = { basePrice: -1 };
+    }
+
+    const services = await db
+      .collection("services")
+      .find(filter)
+      .sort(sortOption)
+      .toArray();
+
+    res.send(services);
+  } catch (error) {
+    console.error("Services fetch error:", error);
+    res.status(500).send({ message: "Failed to fetch services." });
+  }
+});
+
+
 app.listen(port, ()=>{
     console.log(`Listening to port ${port}...`);
 });
