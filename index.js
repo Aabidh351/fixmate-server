@@ -21,13 +21,32 @@ export async function connectToMongoDB() {
   }
 }
 
-const connectDB = await connectToMongoDB();
+await connectToMongoDB();
 const db = client.db("fixmateDB");
 
 app.get('/', (req, res)=>{
     res.send("Hello from Fixmate!");
-})
+});
+
+app.get("/api/services/featured", async (req, res) => {
+  try {
+    const services = await db.collection("services")
+      .find({
+        approvalStatus: "approved",
+        isAvailable: true,
+      })
+      .sort({ createdAt: -1 })
+      .limit(6)
+      .toArray();
+
+    res.send(services);
+  } catch (error) {
+    res.status(500).send({ message: "Failed to fetch featured services." });
+  }
+});
 
 app.listen(port, ()=>{
     console.log(`Listening to port ${port}...`);
-})
+});
+
+export default app;
