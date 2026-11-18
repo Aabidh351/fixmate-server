@@ -1,6 +1,6 @@
 import express from "express";
 import cors from "cors";
-import { MongoClient } from 'mongodb';
+import { MongoClient, ObjectId } from 'mongodb';
 import 'dotenv/config';
 
 const app = express();
@@ -45,7 +45,6 @@ app.get("/api/services/featured", async (req, res) => {
   }
 });
 
-
 app.get("/api/services", async (req, res) => {
   try {
     const { search, category, serviceMode, sort } = req.query;
@@ -56,7 +55,10 @@ app.get("/api/services", async (req, res) => {
     };
 
     if (category && category !== "All") {
-      filter.category = category;
+      filter.category = {
+        $regex: `^${String(category).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
+        $options: "i",
+      };
     }
 
     if (serviceMode && serviceMode !== "All") {
@@ -96,6 +98,30 @@ app.get("/api/services", async (req, res) => {
     res.status(500).send({ message: "Failed to fetch services." });
   }
 });
+
+app.get("/api/services/:id", async (req, res) => {
+  try {
+    if (!ObjectId.isValid(req.params.id)) {
+      return res.status(400).send({ message: "Invalid service ID." });
+    }
+
+    const service = await db.collection("services").findOne({
+      _id: new ObjectId(req.params.id),
+      approvalStatus: "approved",
+      isAvailable: true,
+    });
+
+    if (!service) {
+      return res.status(404).send({ message: "Service not found." });
+    }
+
+    res.send(service);
+  } catch (error) {
+    console.error("Service fetch error:", error);
+    res.status(500).send({ message: "Failed to fetch service." });
+  }
+});
+
 
 
 app.listen(port, ()=>{
