@@ -369,6 +369,44 @@ app.get("/api/bookings/my", verifyToken, verifyCustomer, async (req, res) => {
   }
 });
 
+app.patch(
+  "/api/bookings/:id/cancel",
+  verifyToken,
+  verifyCustomer,
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      if (!ObjectId.isValid(id)) {
+        return res.status(400).send({ message: "Invalid booking ID." });
+      }
+
+      const result = await db.collection("bookings").updateOne(
+        {
+          _id: new ObjectId(id),
+          customerEmail: req.user.email,
+          status: "requested",
+        },
+        {
+          $set: {
+            status: "cancelled",
+          },
+        }
+      );
+
+      if (result.matchedCount === 0) {
+        return res.status(404).send({
+          message: "Booking not found or can no longer be cancelled.",
+        });
+      }
+
+      res.send({ message: "Booking cancelled successfully." });
+    } catch (error) {
+      console.error("Booking cancellation error:", error);
+      res.status(500).send({ message: "Failed to cancel booking." });
+    }
+  }
+);
 
 app.listen(port, ()=>{
     console.log(`Listening to port ${port}...`);
