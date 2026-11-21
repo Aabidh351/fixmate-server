@@ -452,14 +452,60 @@ app.get(
   }
 );
 
-console.log(
-  "REGISTERED ROUTES:",
-  app.router.stack
-    .filter((layer) => layer.route)
-    .map((layer) => ({
-      path: layer.route.path,
-      methods: layer.route.methods,
-    }))
+app.post(
+  "/api/services",
+  verifyToken,
+  verifyTechnician,
+  async (req, res) => {
+    try {
+      const {
+        title,
+        description,
+        category,
+        basePrice,
+        image,
+        serviceMode,
+      } = req.body;
+
+      if (
+        !title ||
+        !description ||
+        !category ||
+        !basePrice ||
+        !serviceMode
+      ) {
+        return res.status(400).send({
+          message: "Please provide all required fields.",
+        });
+      }
+
+      const newService = {
+        title,
+        description,
+        category,
+        basePrice: Number(basePrice),
+        image: image || "",
+        serviceMode,
+        technicianName: req.user.name,
+        technicianEmail: req.user.email,
+        approvalStatus: "pending",
+        createdAt: new Date(),
+      };
+
+      const result = await db.collection("services").insertOne(newService);
+
+      res.status(201).send({
+        message: "Service submitted successfully. Awaiting admin approval.",
+        insertedId: result.insertedId,
+      });
+    } catch (error) {
+      console.error("Add service error:", error);
+
+      res.status(500).send({
+        message: "Failed to add service.",
+      });
+    }
+  }
 );
 
 app.listen(port, ()=>{
