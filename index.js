@@ -354,6 +354,20 @@ app.post("/api/bookings", verifyToken, verifyCustomer, async (req, res) => {
   }
 });
 
+app.get("/api/bookings/my", verifyToken, verifyCustomer, async (req, res) => {
+  try {
+    const bookings = await db
+      .collection("bookings")
+      .find({ customerEmail: req.user.email })
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    res.send(bookings);
+  } catch (error) {
+    console.error("My bookings fetch error:", error);
+    res.status(500).send({ message: "Failed to fetch bookings." });
+  }
+});
 
 
 app.listen(port, ()=>{
