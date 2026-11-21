@@ -508,6 +508,123 @@ app.post(
   }
 );
 
+
+app.patch(
+  "/api/services/:id",
+  verifyToken,
+  verifyTechnician,
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      if (!ObjectId.isValid(id)) {
+        return res.status(400).send({ message: "Invalid service ID." });
+      }
+
+      const service = await db.collection("services").findOne({
+        _id: new ObjectId(id),
+        technicianEmail: req.user.email,
+      });
+
+      if (!service) {
+        return res.status(404).send({ message: "Service not found." });
+      }
+
+      if (
+        Object.keys(req.body).length === 1 &&
+        typeof req.body.isAvailable === "boolean"
+      ) {
+        await db.collection("services").updateOne(
+          { _id: new ObjectId(id), technicianEmail: req.user.email },
+          { $set: { isAvailable: req.body.isAvailable } }
+        );
+
+        return res.send({ message: "Availability updated successfully." });
+      }
+
+      const {
+        title,
+        description,
+        category,
+        basePrice,
+        image,
+        estimatedDuration,
+        serviceMode,
+        serviceArea,
+      } = req.body;
+
+      if (
+        !title?.trim() ||
+        !description?.trim() ||
+        !category ||
+        !Number.isFinite(Number(basePrice)) ||
+        Number(basePrice) <= 0 ||
+        !estimatedDuration ||
+        !serviceMode ||
+        !serviceArea?.trim() ||
+        !image
+      ) {
+        return res.status(400).send({
+          message: "Please provide all required service information.",
+        });
+      }
+
+      await db.collection("services").updateOne(
+        { _id: new ObjectId(id), technicianEmail: req.user.email },
+        {
+          $set: {
+            title: title.trim(),
+            description: description.trim(),
+            category,
+            basePrice: Number(basePrice),
+            image,
+            estimatedDuration,
+            serviceMode,
+            serviceArea: serviceArea.trim(),
+            approvalStatus: "pending",
+          },
+        }
+      );
+
+      res.send({ message: "Service updated. Awaiting admin approval." });
+    } catch (error) {
+      console.error("Service update error:", error);
+      res.status(500).send({ message: "Failed to update service." });
+    }
+  }
+);
+
+
+app.delete(
+  "/api/services/:id",
+  verifyToken,
+  verifyTechnician,
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      if (!ObjectId.isValid(id)) {
+        return res.status(400).send({ message: "Invalid service ID." });
+      }
+
+      const result = await db.collection("services").deleteOne({
+        _id: new ObjectId(id),
+        technicianEmail: req.user.email,
+      });
+
+      if (result.deletedCount === 0) {
+        return res.status(404).send({ message: "Service not found." });
+      }
+
+      res.send({ message: "Service deleted successfully." });
+    } catch (error) {
+      console.error("Service deletion error:", error);
+      res.status(500).send({ message: "Failed to delete service." });
+    }
+  }
+);
+
+
 app.listen(port, ()=>{
     console.log(`Listening to port ${port}...`);
 });
