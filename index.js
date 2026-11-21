@@ -408,6 +408,60 @@ app.patch(
   }
 );
 
+app.get(
+  "/api/technician/services",
+  verifyToken,
+  verifyTechnician,
+  async (req, res) => {
+    try {
+      const services = await db
+        .collection("services")
+        .find({ technicianEmail: req.user.email })
+        .sort({ createdAt: -1 })
+        .toArray();
+
+      res.send(services);
+    } catch (error) {
+      console.error("Technician services error:", error);
+      res.status(500).send({
+        message: "Failed to fetch your services.",
+      });
+    }
+  }
+);
+
+app.get(
+  "/api/technician/bookings",
+  verifyToken,
+  verifyTechnician,
+  async (req, res) => {
+    try {
+      const bookings = await db
+        .collection("bookings")
+        .find({ technicianEmail: req.user.email })
+        .sort({ createdAt: -1 })
+        .toArray();
+
+      res.send(bookings);
+    } catch (error) {
+      console.error("Technician bookings error:", error);
+      res.status(500).send({
+        message: "Failed to fetch your bookings.",
+      });
+    }
+  }
+);
+
+console.log(
+  "REGISTERED ROUTES:",
+  app.router.stack
+    .filter((layer) => layer.route)
+    .map((layer) => ({
+      path: layer.route.path,
+      methods: layer.route.methods,
+    }))
+);
+
 app.listen(port, ()=>{
     console.log(`Listening to port ${port}...`);
 });
