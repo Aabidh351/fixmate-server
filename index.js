@@ -12,7 +12,17 @@ const port = process.env.PORT || 5000;
 app.use(express.json());
 app.use(cors());
 
-const client = new MongoClient(process.env.MONGO_URI);
+const client = new MongoClient(process.env.MONGO_URI, {
+  // This backend also runs on Vercel against the same Atlas cluster. Keep each
+  // instance's pool small and fail fast so temporary Atlas/network problems do
+  // not exhaust the cluster connection limit or hang a function for 80 seconds.
+  maxPoolSize: 3,
+  minPoolSize: 0,
+  maxIdleTimeMS: 30_000,
+  connectTimeoutMS: 10_000,
+  serverSelectionTimeoutMS: 10_000,
+});
+
 export async function connectToMongoDB() {
   try {
     await client.connect();
@@ -20,7 +30,9 @@ export async function connectToMongoDB() {
     return client;
   } catch (err) {
     console.error("MongoDB connection failed:", err);
-    process.exit(1);
+    // Don't call process.exit() here: in a serverless instance that kills the
+    // whole runtime. Throw so the invocation fails and the platform retries.
+    throw err;
   }
 }
 
