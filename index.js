@@ -3,9 +3,11 @@ import cors from "cors";
 import { MongoClient, ObjectId } from 'mongodb';
 import 'dotenv/config';
 import { createRemoteJWKSet, jwtVerify } from "jose";
+import Stripe from "stripe";
 
 const app = express();
 const port = process.env.PORT || 5000;
+
 
 app.use(express.json());
 app.use(cors());
@@ -35,6 +37,7 @@ const JWKS = createRemoteJWKSet(
   new URL("/api/auth/jwks", authBaseURL)
 );
 
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const verifyToken = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
@@ -771,6 +774,225 @@ app.patch("/api/admin/services/:id/approval", verifyToken, verifyAdmin, async (r
     });
   }
 });
+
+
+app.post(
+  "/api/payments/create-checkout-session",
+  verifyToken,
+  verifyCustomer,
+  async (req, res) => {
+    try {
+      const { bookingId } = req.body;
+
+      if (!ObjectId.isValid(bookingId)) {
+        return res.status(400).send({
+          message: "Invalid booking ID.",
+        });
+      }
+
+      const booking = await db.collection("bookings").findOne({
+        _id: new ObjectId(bookingId),
+        customerEmail: req.user.email,
+      });
+
+      if (!booking) {
+        return res.status(404).send({
+          message: "Booking not found.",
+        });
+      }
+
+      if (
+        booking.status !== "completed" ||
+        booking.paymentStatus !== "unpaid"
+      ) {
+        return res.status(400).send({
+          message: "This booking is not eligible for payment.",
+        });
+      }
+
+      if (
+        !Number.isFinite(Number(booking.finalAmount)) ||
+        Number(booking.finalAmount) <= 0
+      ) {
+        return res.status(400).send({
+          message: "Invalid payment amount.",
+        });
+      }
+
+      const session = await stripe.checkout.sessions.create({
+        mode: "payment",
+
+        line_items: [
+          {
+            price_data: {
+              currency: "usd",
+              product_data: {
+                name: booking.serviceTitle,
+                description: `Repair service booking #${bookingId}`,
+              },
+              unit_amount: Math.round(
+                Number(booking.finalAmount) * 100
+              ),
+            },
+            quantity: 1,
+          },
+        ],
+
+        metadata: {
+          bookingId: bookingId,
+          customerEmail: req.user.email,
+        },
+
+        success_url: `${process.env.FRONTEND_URL}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
+
+        cancel_url: `${process.env.FRONTEND_URL}/payment/cancel`,
+      });
+
+      res.send({
+        checkoutUrl: session.url,
+      });
+    } catch (error) {
+      console.error("Checkout session error:", error);
+
+      res.status(500).send({
+        message: "Failed to create checkout session.",
+      });
+    }
+  }
+);
+
+
+app.post(
+  "/api/payments/verify-session",
+  verifyToken,
+  verifyCustomer,
+  async (req, res) => {
+    try {
+      const { sessionId } = req.body;
+
+      if (!sessionId) {
+        return res.status(400).send({
+          message: "Checkout session ID is required.",
+        });
+      }
+
+      // Retrieve the actual session from Stripe
+      const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+      if (
+        session.payment_status !== "paid" ||
+        session.metadata.customerEmail !== req.user.email
+      ) {
+        return res.status(400).send({
+          message: "Payment could not be verified.",
+        });
+      }
+
+      const bookingId = session.metadata.bookingId;
+
+      if (!ObjectId.isValid(bookingId)) {
+        return res.status(400).send({
+          message: "Invalid booking ID.",
+        });
+      }
+
+      const booking = await db.collection("bookings").findOne({
+        _id: new ObjectId(bookingId),
+        customerEmail: req.user.email,
+      });
+
+      if (!booking) {
+        return res.status(404).send({
+          message: "Booking not found.",
+        });
+      }
+
+      // Prevent duplicate transaction records
+      const existingPayment = await db.collection("payments").findOne({
+        stripeSessionId: session.id,
+      });
+
+      if (existingPayment) {
+        return res.send({
+          message: "Payment already verified.",
+        });
+      }
+
+      if (
+        booking.status !== "completed" ||
+        booking.paymentStatus !== "unpaid"
+      ) {
+        return res.status(400).send({
+          message: "This booking is not eligible for payment.",
+        });
+      }
+
+      const payment = {
+        bookingId: bookingId,
+        serviceTitle: booking.serviceTitle,
+        customerEmail: booking.customerEmail,
+        technicianEmail: booking.technicianEmail,
+        amount: session.amount_total / 100,
+        currency: session.currency,
+        stripeSessionId: session.id,
+        paymentIntentId: session.payment_intent,
+        status: "paid",
+        createdAt: new Date(),
+      };
+
+      await db.collection("payments").insertOne(payment);
+
+      await db.collection("bookings").updateOne(
+        {
+          _id: new ObjectId(bookingId),
+          paymentStatus: "unpaid",
+        },
+        {
+          $set: {
+            paymentStatus: "paid",
+            paidAt: new Date(),
+          },
+        }
+      );
+
+      res.send({
+        message: "Payment verified successfully.",
+      });
+    } catch (error) {
+      console.error("Payment verification error:", error);
+
+      res.status(500).send({
+        message: "Failed to verify payment.",
+      });
+    }
+  }
+);
+
+
+app.get(
+  "/api/payments/my",
+  verifyToken,
+  verifyCustomer,
+  async (req, res) => {
+    try {
+      const payments = await db
+        .collection("payments")
+        .find({ customerEmail: req.user.email })
+        .sort({ createdAt: -1 })
+        .toArray();
+
+      res.send(payments);
+    } catch (error) {
+      console.error("Payment history error:", error);
+
+      res.status(500).send({
+        message: "Failed to load payment history.",
+      });
+    }
+  }
+);
+
+
 
 
 app.listen(port, ()=>{
