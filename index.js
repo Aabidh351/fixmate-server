@@ -1088,6 +1088,20 @@ app.get("/api/admin/bookings", verifyToken, verifyAdmin, async (req, res) => {
   }
 });
 
+app.get("/api/admin/payments", verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const payments = await db
+      .collection("payments")
+      .find()
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    res.send(payments);
+  } catch (error) {
+    console.error("Failed to fetch admin payments:", error);
+    res.status(500).send({ message: "Failed to fetch payments." });
+  }
+});
 
 app.listen(port, ()=>{
     console.log(`Listening to port ${port}...`);
