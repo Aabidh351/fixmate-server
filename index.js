@@ -1103,6 +1103,84 @@ app.get("/api/admin/payments", verifyToken, verifyAdmin, async (req, res) => {
   }
 });
 
+// Get logged-in user's profile
+app.get("/api/profile", verifyToken, async (req, res) => {
+  try {
+    const user = await db.collection("user").findOne(
+      { email: req.user.email },
+      {
+        projection: {
+          name: 1,
+          email: 1,
+          role: 1,
+          phone: 1,
+          area: 1,
+          bio: 1,
+          image: 1,
+        },
+      }
+    );
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    res.json(user);
+  } catch (error) {
+    res.status(500).json({ message: "Failed to fetch profile." });
+  }
+});
+
+app.patch("/api/profile", verifyToken, async (req, res) => {
+  try {
+    const { name, phone, area, bio, image } = req.body;
+
+    if (!name?.trim()) {
+      return res.status(400).json({ message: "Name is required." });
+    }
+
+    const result = await db.collection("user").updateOne(
+      { email: req.user.email },
+      {
+        $set: {
+          name: name.trim(),
+          phone: phone || "",
+          area: area || "",
+          bio: bio || "",
+          image: image || "",
+          updatedAt: new Date(),
+        },
+      }
+    );
+
+    if (!result.matchedCount) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    const updatedUser = await db.collection("user").findOne(
+      { email: req.user.email },
+      {
+        projection: {
+          name: 1,
+          email: 1,
+          role: 1,
+          phone: 1,
+          area: 1,
+          bio: 1,
+          image: 1,
+        },
+      }
+    );
+
+    res.json({
+      message: "Profile updated successfully.",
+      user: updatedUser,
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to update profile." });
+  }
+});
+
 app.listen(port, ()=>{
     console.log(`Listening to port ${port}...`);
 });
