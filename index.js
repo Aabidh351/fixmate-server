@@ -645,8 +645,6 @@ app.delete(
   }
 );
 
-
-
 app.patch(
   "/api/bookings/:id/status",
   verifyToken,
