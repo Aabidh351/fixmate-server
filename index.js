@@ -993,6 +993,86 @@ app.get(
 );
 
 
+app.get(
+  "/api/admin/users",
+  verifyToken,
+  verifyAdmin,
+  async (req, res) => {
+    try {
+      const users = await db
+        .collection("user")
+        .find(
+          {},
+          {
+            projection: {
+              name: 1,
+              email: 1,
+              role: 1,
+              image: 1,
+              createdAt: 1,
+            },
+          }
+        )
+        .sort({ createdAt: -1 })
+        .toArray();
+
+      res.send(users);
+    } catch (error) {
+      console.error("Admin users fetch error:", error);
+
+      res.status(500).send({
+        message: "Failed to load users.",
+      });
+    }
+  }
+);
+
+
+app.patch(
+  "/api/admin/users/:id/role",
+  verifyToken,
+  verifyAdmin,
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { role } = req.body;
+
+      if (!ObjectId.isValid(id)) {
+        return res.status(400).send({
+          message: "Invalid user ID.",
+        });
+      }
+
+      if (!["customer", "technician", "admin"].includes(role)) {
+        return res.status(400).send({
+          message: "Invalid user role.",
+        });
+      }
+
+      const result = await db.collection("user").updateOne(
+        { _id: new ObjectId(id) },
+        { $set: { role } }
+      );
+
+      if (result.matchedCount === 0) {
+        return res.status(404).send({
+          message: "User not found.",
+        });
+      }
+
+      res.send({
+        message: "User role updated successfully.",
+      });
+    } catch (error) {
+      console.error("User role update error:", error);
+
+      res.status(500).send({
+        message: "Failed to update user role.",
+      });
+    }
+  }
+);
+
 
 
 app.listen(port, ()=>{
