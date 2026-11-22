@@ -625,8 +625,118 @@ app.delete(
 );
 
 
+app.patch("/api/bookings/:id/status", verifyToken, verifyTechnician, async (req, res) => {
+  try {
+    const { status } = req.body;
+    const { id } = req.params;
+
+    if (!["accepted", "rejected"].includes(status)) {
+      return res.status(400).send({
+        message: "Invalid booking status.",
+      });
+    }
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).send({
+        message: "Invalid booking ID.",
+      });
+    }
+
+    const result = await db.collection("bookings").updateOne(
+      {
+        _id: new ObjectId(id),
+        technicianEmail: req.user.email,
+        status: "requested",
+      },
+      {
+        $set: {
+          status,
+          updatedAt: new Date(),
+        },
+      }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).send({
+        message: "Booking not found or cannot be updated.",
+      });
+    }
+
+    res.send({
+      message: `Booking ${status} successfully.`,
+    });
+  } catch (error) {
+    res.status(500).send({
+      message: "Failed to update booking status.",
+    });
+  }
+});
+
+app.get("/api/admin/services", verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const services = await db.collection("services")
+      .find()
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    res.send(services);
+  } catch (error) {
+    res.status(500).send({
+      message: "Failed to load services.",
+    });
+  }
+});
+
+app.patch("/api/admin/services/:id/approval", verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const { status } = req.body;
+    const { id } = req.params;
+
+    if (!["approved", "rejected"].includes(status)) {
+      return res.status(400).send({
+        message: "Invalid approval status.",
+      });
+    }
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).send({
+        message: "Invalid service ID.",
+      });
+    }
+
+    const result = await db.collection("services").updateOne(
+      {
+        _id: new ObjectId(id),
+        approvalStatus: "pending",
+      },
+      {
+        $set: {
+          approvalStatus: status,
+          updatedAt: new Date(),
+        },
+      }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).send({
+        message: "Pending service not found.",
+      });
+    }
+
+    res.send({
+      message: `Service ${status} successfully.`,
+    });
+  } catch (error) {
+    res.status(500).send({
+      message: "Failed to update service approval.",
+    });
+  }
+});
+
+
 app.listen(port, ()=>{
     console.log(`Listening to port ${port}...`);
 });
+
 
 export default app;
