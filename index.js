@@ -1027,7 +1027,6 @@ app.get(
   }
 );
 
-
 app.patch(
   "/api/admin/users/:id/role",
   verifyToken,
@@ -1049,8 +1048,28 @@ app.patch(
         });
       }
 
+      const userId = new ObjectId(id);
+
+      const targetUser = await db.collection("user").findOne(
+        { _id: userId },
+        { projection: { email: 1 } }
+      );
+
+      if (!targetUser) {
+        return res.status(404).send({
+          message: "User not found.",
+        });
+      }
+
+      // Prevent admins from changing their own role.
+      if (targetUser.email === req.user.email) {
+        return res.status(403).send({
+          message: "You cannot change your own role.",
+        });
+      }
+
       const result = await db.collection("user").updateOne(
-        { _id: new ObjectId(id) },
+        { _id: userId },
         { $set: { role } }
       );
 
@@ -1103,7 +1122,6 @@ app.get("/api/admin/payments", verifyToken, verifyAdmin, async (req, res) => {
   }
 });
 
-// Get logged-in user's profile
 app.get("/api/profile", verifyToken, async (req, res) => {
   try {
     const user = await db.collection("user").findOne(
