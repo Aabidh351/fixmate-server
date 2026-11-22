@@ -1073,6 +1073,20 @@ app.patch(
   }
 );
 
+app.get("/api/admin/bookings", verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const bookings = await db
+      .collection("bookings")
+      .find()
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    res.send(bookings);
+  } catch (error) {
+    console.error("Failed to fetch admin bookings:", error);
+    res.status(500).send({ message: "Failed to fetch bookings." });
+  }
+});
 
 
 app.listen(port, ()=>{
