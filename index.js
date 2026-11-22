@@ -199,7 +199,7 @@ app.get("/api/services/:id", async (req, res) => {
       return res.status(404).send({ message: "Service not found." });
     }
 
-    const technician = await db.collection("users").findOne(
+    const technician = await db.collection("user").findOne(
       { email: service.technicianEmail },
       {
         projection: {
@@ -227,6 +227,7 @@ app.get("/api/services/:id", async (req, res) => {
     res.status(500).send({ message: "Failed to fetch service." });
   }
 });
+
 
 
 app.post("/api/bookings", verifyToken, verifyCustomer, async (req, res) => {
@@ -465,6 +466,8 @@ app.post(
         basePrice,
         image,
         serviceMode,
+        estimatedDuration,
+        serviceArea,
       } = req.body;
 
       if (
@@ -472,10 +475,23 @@ app.post(
         !description ||
         !category ||
         !basePrice ||
-        !serviceMode
+        !serviceMode ||
+        !estimatedDuration ||
+        !serviceArea
       ) {
         return res.status(400).send({
           message: "Please provide all required fields.",
+        });
+      }
+
+      // Retrieve the authenticated technician's information
+      const technician = await db.collection("user").findOne({
+        email: req.user.email,
+      });
+
+      if (!technician) {
+        return res.status(404).send({
+          message: "Technician account not found.",
         });
       }
 
@@ -486,9 +502,15 @@ app.post(
         basePrice: Number(basePrice),
         image: image || "",
         serviceMode,
-        technicianName: req.user.name,
-        technicianEmail: req.user.email,
+        estimatedDuration,
+        serviceArea,
+
+        // Automatically populated from the technician's account
+        technicianName: technician.name,
+        technicianEmail: technician.email,
+
         approvalStatus: "pending",
+        isAvailable: true,
         createdAt: new Date(),
       };
 
@@ -507,7 +529,6 @@ app.post(
     }
   }
 );
-
 
 app.patch(
   "/api/services/:id",
