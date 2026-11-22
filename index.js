@@ -646,52 +646,72 @@ app.delete(
 );
 
 
-app.patch("/api/bookings/:id/status", verifyToken, verifyTechnician, async (req, res) => {
-  try {
-    const { status } = req.body;
-    const { id } = req.params;
 
-    if (!["accepted", "rejected"].includes(status)) {
-      return res.status(400).send({
-        message: "Invalid booking status.",
-      });
-    }
+app.patch(
+  "/api/bookings/:id/status",
+  verifyToken,
+  verifyTechnician,
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { status, finalAmount } = req.body;
 
-    if (!ObjectId.isValid(id)) {
-      return res.status(400).send({
-        message: "Invalid booking ID.",
-      });
-    }
+      if (!ObjectId.isValid(id)) {
+        return res.status(400).send({ message: "Invalid booking ID." });
+      }
 
-    const result = await db.collection("bookings").updateOne(
-      {
+      const booking = await db.collection("bookings").findOne({
         _id: new ObjectId(id),
         technicianEmail: req.user.email,
-        status: "requested",
-      },
-      {
-        $set: {
-          status,
-          updatedAt: new Date(),
-        },
-      }
-    );
+      });
 
-    if (result.matchedCount === 0) {
-      return res.status(404).send({
-        message: "Booking not found or cannot be updated.",
+      if (!booking) {
+        return res.status(404).send({ message: "Booking not found." });
+      }
+
+      const allowedTransitions = {
+        requested: ["accepted", "rejected"],
+        accepted: ["in-progress"],
+        "in-progress": ["completed"],
+      };
+
+      if (!allowedTransitions[booking.status]?.includes(status)) {
+        return res.status(400).send({
+          message: "Invalid booking status transition.",
+        });
+      }
+
+      const updateData = {
+        status,
+        updatedAt: new Date(),
+      };
+
+      if (status === "completed") {
+        if (!Number.isFinite(Number(finalAmount)) || Number(finalAmount) <= 0) {
+          return res.status(400).send({
+            message: "Please provide a valid final amount.",
+          });
+        }
+
+        updateData.finalAmount = Number(finalAmount);
+      }
+
+      await db.collection("bookings").updateOne(
+        { _id: new ObjectId(id) },
+        { $set: updateData }
+      );
+
+      res.send({ message: `Booking ${status} successfully.` });
+    } catch (error) {
+      console.error("Booking status update error:", error);
+
+      res.status(500).send({
+        message: "Failed to update booking status.",
       });
     }
-
-    res.send({
-      message: `Booking ${status} successfully.`,
-    });
-  } catch (error) {
-    res.status(500).send({
-      message: "Failed to update booking status.",
-    });
   }
-});
+);
+
 
 app.get("/api/admin/services", verifyToken, verifyAdmin, async (req, res) => {
   try {
